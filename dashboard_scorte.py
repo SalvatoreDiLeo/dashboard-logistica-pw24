@@ -115,6 +115,9 @@ elif indice_migliore == 1:
 else:
     stima_futura = previsione_trend[-1]
 
+# Una stima negativa non ha senso (le scorte non possono essere meno di zero): la porto a zero
+stima_futura = max(0, stima_futura)
+
 # 6. CALCOLO FINALE DELLE SCORTE FISICHE
 deviazione_standard = np.std(valori)
 scorta_ciclica = stima_futura / 2
@@ -147,3 +150,43 @@ with col2:
     st.warning(f"🛡️ Scorta Sicurezza: {int(scorta_sicurezza)} unità")
     st.error(f"🚚 Merce in Transito (Pipeline): {int(scorta_pipeline)} unità")
     st.success(f"❄️ Scorta Anticipata: {int(scorta_anticipata)} unità")
+
+# 8. CONFRONTO TRA SCENARI (lead time e livello di servizio)
+st.subheader("Confronto tra scenari")
+st.write("Qui sotto vedo le scorte dell'articolo scelto con lead time e livelli di servizio diversi.")
+
+# Scenari sul lead time: il livello di servizio resta quello scelto nella barra laterale
+righe_lead_time = []
+for lt in [2, 4, 8, 12]:
+    L = lt / 4.0
+    righe_lead_time.append({
+        "Lead time (settimane)": lt,
+        "Ciclica": int(stima_futura / 2),
+        "Sicurezza": int(z_score * deviazione_standard * np.sqrt(L)),
+        "In transito": int(stima_futura * L),
+        "Anticipata": int(scorta_anticipata)
+    })
+tabella_lead_time = pd.DataFrame(righe_lead_time)
+
+# Scenari sul livello di servizio: il lead time resta quello scelto nella barra laterale
+righe_servizio = []
+for ls in [80, 90, 95, 99]:
+    righe_servizio.append({
+        "Livello di servizio (%)": ls,
+        "Sicurezza": int(norm.ppf(ls / 100.0) * deviazione_standard * np.sqrt(mesi_lead_time))
+    })
+tabella_servizio = pd.DataFrame(righe_servizio)
+
+col3, col4 = st.columns(2)
+with col3:
+    st.write("**Scorte al variare del lead time**")
+    grafico_scenari = go.Figure()
+    for nome in ["Ciclica", "Sicurezza", "In transito", "Anticipata"]:
+        grafico_scenari.add_trace(go.Bar(x=tabella_lead_time["Lead time (settimane)"].astype(str) + " sett.", y=tabella_lead_time[nome], name=nome))
+    grafico_scenari.update_layout(barmode="stack", height=300, margin=dict(t=10, b=10))
+    st.plotly_chart(grafico_scenari, use_container_width=True)
+    st.dataframe(tabella_lead_time, hide_index=True)
+
+with col4:
+    st.write("**Scorta di sicurezza al variare del livello di servizio**")
+    st.dataframe(tabella_servizio, hide_index=True)
